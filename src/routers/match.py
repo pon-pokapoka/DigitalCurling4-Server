@@ -37,6 +37,7 @@ from src.models.basic_authentication_models import UserModel
 from src.converter import DataConverter
 from src.redis_subscriber import RedisSubscriber
 from src.domain.match_rules import (
+    MD_POSITIONED_STONES_PATTERN_COUNT,
     calculate_total_score,
     generate_reset_stone_coordinate_data,
     get_score_from_distance_list,
@@ -44,7 +45,7 @@ from src.domain.match_rules import (
     stone_distance_from_tee,
     total_shots_per_end as get_total_shots_per_end,
 )
-from src.services.simulation import simulate_fcv1
+from src.services.simulation import clamp_angular_velocity, simulate_fcv1
 from src.authentication.basic_authentication import BasicAuthentication
 from src.authentication.basic_authentication_crud import (
     CreateAuthentication,
@@ -150,9 +151,11 @@ class BaseServer:
                 client_data.positioned_stones_pattern = 0
             if (
                 client_data.positioned_stones_pattern < 0
-                or client_data.positioned_stones_pattern > 5
+                or client_data.positioned_stones_pattern >= MD_POSITIONED_STONES_PATTERN_COUNT
             ):
-                raise bad_request("positioned_stones_pattern must be between 0 and 5.")
+                raise bad_request(
+                    f"positioned_stones_pattern must be between 0 and {MD_POSITIONED_STONES_PATTERN_COUNT - 1}."
+                )
 
         simulator_id = await match_db.read_simulator_id(
             client_data.simulator.simulator_name
@@ -617,16 +620,9 @@ class DCServer:
         # 
         dist_shot_info: ShotInfoModel = shot_info.model_copy(deep=True)
         dist_shot_info.translational_velocity = dist_translational_velocity
-        angular_velocity_sign = np.sign(shot_info.angular_velocity)
-        dist_shot_info.angular_velocity = np.max(
-            [np.min([np.abs(shot_info.angular_velocity), np.pi / 2]),
-            np.pi / 6]
-        )
-        if angular_velocity_sign == 0:
-            pass
-        else:
-            dist_shot_info.angular_velocity *= -angular_velocity_sign
-            shot_info.angular_velocity *= -angular_velocity_sign
+        # Magnitude is clamped, sign stays in the client convention (positive = cw).
+        # The simulator's sign convention is applied inside simulate_fcv1().
+        dist_shot_info.angular_velocity = clamp_angular_velocity(shot_info.angular_velocity)
         dist_shot_info.shot_angle = shot_info.shot_angle + np.random.normal(
             loc=0.0, scale=player_data.angle_std_dev
         )

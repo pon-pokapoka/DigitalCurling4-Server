@@ -10,7 +10,12 @@ from src.models.schema_models import StateSchema, MatchDataSchema
 from src.models.dc_models import StateModel
 from src.converter import DataConverter
 
-HEART_BEAT = 30
+# Idle keep-alive interval for SSE (": ping" comment). Must stay well below the
+# clients' socket read timeout (dc4client defaults to 15 s).
+HEART_BEAT = 10
+# How long a player's presence key stays valid without being refreshed.
+# The stream loops refresh it at least once per HEART_BEAT.
+PRESENCE_TTL_SECONDS = 30
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,7 +47,7 @@ class RedisSubscriber:
         """
         pubsub = redis.pubsub()
         presence_key_self: str | None = None
-        presence_ttl_seconds = HEART_BEAT * 3
+        presence_ttl_seconds = PRESENCE_TTL_SECONDS
 
         await pubsub.subscribe(channel)
 
@@ -222,7 +227,10 @@ class RedisSubscriber:
                         channel,
                         json.dumps({"type": "initial_sync", "match_id": str(self.match_id)}),
                     )
-                waiting_for_initial_sync_signal = False
+                    waiting_for_initial_sync_signal = False
+                # If another subscriber holds the lock, keep retrying: its signal normally
+                # reaches us and we break out below, but if we subscribed after it was
+                # published we must emit our own once the lock expires.
 
             msg = await pubsub.get_message(
                 ignore_subscribe_messages=True, timeout=HEART_BEAT

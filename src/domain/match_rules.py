@@ -24,25 +24,33 @@ STONE_RADIUS = np.float32(0.145)
 SCORE_DISTANCE = np.float32(HOUSE_RADIUS + STONE_RADIUS)
 
 MD_POSITIONED_STONE_IN_HOUSE = (0.0, 38.870)
+# Reference point is the tee line / 8-foot circle intersection (x = 1.219);
+# the stone sits in front of it with its back edge on the tee line.
 MD_POWER_PLAY_IN_HOUSE = (1.219, 38.260)
 
-# Pattern index (0-5) matches positioned_stones_pattern.
-MD_POSITIONED_STONE_GUARD = [
-    (0.0, 35.350),
-    (0.0, 35.060),
-    (0.0, 34.435),
-    (0.0, 34.145),
-    (0.0, 33.520),
-    (0.0, 33.230),
-]
+# Guard marks (World Curling, 2026-27 season onwards) lie on the centre line
+# 2 ft apart: 10'6" / 12'6" / 14'6" / 16'6" from the tee line
+# (4'6" / 6'6" / 8'6" / 10'6" from the outer edge of the house).
+# Values are y in the simulator coordinate system (hack midpoint = 0, tee line = 38.405).
+MD_GUARD_MARKS_Y = (35.205, 34.595, 33.985, 33.375)
 
+# The guard stone is placed with its edge touching the mark, so each mark gives
+# two positions. Pattern index (0-7) matches positioned_stones_pattern:
+#   even -> house side of the mark, odd -> hack side of the mark.
+MD_GUARD_STONE_Y = tuple(
+    round(mark_y + side * float(STONE_RADIUS), 3)
+    for mark_y in MD_GUARD_MARKS_Y
+    for side in (1.0, -1.0)
+)
+MD_POSITIONED_STONES_PATTERN_COUNT = len(MD_GUARD_STONE_Y)
+
+MD_POSITIONED_STONE_GUARD = [(0.0, y) for y in MD_GUARD_STONE_Y]
+
+# Power play marks are on the straight line from the house stone reference point
+# (tee line / 8-foot circle intersection) to the midpoint of the hack, so x is
+# proportional to y. Coordinates are for the RIGHT side; LEFT flips x.
 MD_POWER_PLAY_GUARD = [
-    (1.093, 35.350),
-    (1.087, 35.060),
-    (1.073, 34.435),
-    (1.067, 34.145),
-    (1.053, 33.520),
-    (1.047, 33.230),
+    (round(MD_POWER_PLAY_IN_HOUSE[0] * y / float(TEE_LINE), 3), y) for y in MD_GUARD_STONE_Y
 ]
 
 
@@ -137,13 +145,16 @@ def generate_mixed_doubles_initial_stones(
     Args:
         hammer_team_name: "team0" or "team1".
         power_play_side: None | "left" | "right".
-        positioned_stones_pattern: 0..5.
+        positioned_stones_pattern: 0..MD_POSITIONED_STONES_PATTERN_COUNT-1
+            (even = house side of the mark, odd = hack side).
 
     Returns:
         Stone coordinate dict compatible with StoneCoordinateSchema.data.
     """
-    if positioned_stones_pattern < 0 or positioned_stones_pattern > 5:
-        raise ValueError("positioned_stones_pattern must be between 0 and 5")
+    if not 0 <= positioned_stones_pattern < MD_POSITIONED_STONES_PATTERN_COUNT:
+        raise ValueError(
+            f"positioned_stones_pattern must be between 0 and {MD_POSITIONED_STONES_PATTERN_COUNT - 1}"
+        )
 
     x_sign = -1.0 if power_play_side == "left" else 1.0
 

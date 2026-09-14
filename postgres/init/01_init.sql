@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS match_mixed_doubles_settings (
 
 ALTER TABLE match_mixed_doubles_settings
   ADD CONSTRAINT chk_md_settings_pattern
-    CHECK (positioned_stones_pattern BETWEEN 0 AND 5);
+    CHECK (positioned_stones_pattern BETWEEN 0 AND 7);
 
 ALTER TABLE match_mixed_doubles_settings
   ADD CONSTRAINT chk_md_settings_pp_end

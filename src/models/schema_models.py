@@ -184,7 +184,7 @@ class MatchMixedDoublesSettingsSchema(BaseModel):
     """Match settings specific to mixed doubles mode.
 
     Attributes:
-        positioned_stones_pattern: Initial positioned-stones pattern index.
+        positioned_stones_pattern: Initial positioned-stones pattern index (0-7).
         team0_power_play_end: Selected power-play end for the first team.
         team1_power_play_end: Selected power-play end for the second team.
         end_setup_team_ids: Team order used when preparing each end.

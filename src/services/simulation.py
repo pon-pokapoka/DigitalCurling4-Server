@@ -1,8 +1,33 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from src.models.dc_models import ShotInfoModel
 from src.models.schema_models import StateSchema
-from src.simulator import StoneSimulator
+
+if TYPE_CHECKING:
+    from src.simulator import StoneSimulator
+
+# Angular velocity conventions:
+# - Client / DB / last_move: positive = clockwise (dc4client sends +pi/2 for "cw").
+# - FCV1-Simulator (>= v1.0.30 takes the value as-is): counter-clockwise positive,
+#   i.e. cw = -pi/2. The sign is flipped here, and only here.
+MIN_ANGULAR_VELOCITY = np.pi / 6
+MAX_ANGULAR_VELOCITY = np.pi / 2
+
+
+def clamp_angular_velocity(angular_velocity: float) -> float:
+    """Clamp the magnitude to [pi/6, pi/2], keeping the client's sign (0 counts as clockwise)."""
+    spin_sign = 1.0 if angular_velocity >= 0 else -1.0
+    magnitude = float(np.clip(abs(angular_velocity), MIN_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY))
+    return spin_sign * magnitude
+
+
+def to_simulator_angular_velocity(angular_velocity: float) -> float:
+    """Convert a client-convention angular velocity to the simulator's (ccw positive)."""
+    return -angular_velocity
 
 
 def simulate_fcv1(
@@ -37,7 +62,7 @@ def simulate_fcv1(
         total_shot_number,
         velocity_x,
         velocity_y,
-        shot_info.angular_velocity,
+        to_simulator_angular_velocity(shot_info.angular_velocity),
         team_number,
         shot_per_team,
         applied_rule,

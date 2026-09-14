@@ -1,6 +1,9 @@
 import pytest
 
 from src.domain.match_rules import (
+    MD_POSITIONED_STONE_GUARD,
+    MD_POSITIONED_STONES_PATTERN_COUNT,
+    MD_POWER_PLAY_GUARD,
     generate_mixed_doubles_initial_stones,
     generate_reset_stone_coordinate_data,
     stone_count_per_team,
@@ -46,8 +49,53 @@ def test_generate_mixed_doubles_initial_stones_invalid_pattern_raises():
         generate_mixed_doubles_initial_stones(
             hammer_team_name="team0",
             power_play_side=None,
-            positioned_stones_pattern=6,
+            positioned_stones_pattern=8,
         )
+
+
+def test_mixed_doubles_guard_tables_follow_2026_27_markings():
+    # Four marks 2 ft apart, each giving a house-side and a hack-side position.
+    assert MD_POSITIONED_STONES_PATTERN_COUNT == 8
+    assert len(MD_POSITIONED_STONE_GUARD) == 8
+    assert len(MD_POWER_PLAY_GUARD) == 8
+
+    ys = [y for _, y in MD_POSITIONED_STONE_GUARD]
+    assert ys == pytest.approx([35.350, 35.060, 34.740, 34.450, 34.130, 33.840, 33.520, 33.230])
+
+    # Centre guard is always on the centre line.
+    assert all(x == 0.0 for x, _ in MD_POSITIONED_STONE_GUARD)
+
+    # Power play guard shares y with the centre guard and its x lies on the line
+    # from the hack midpoint (0, 0) to the tee line / 8-foot intersection (1.219, 38.405).
+    for (_, y_center), (x_pp, y_pp) in zip(MD_POSITIONED_STONE_GUARD, MD_POWER_PLAY_GUARD):
+        assert y_pp == y_center
+        assert x_pp == pytest.approx(1.219 * y_pp / 38.405, abs=0.0005)
+    assert [x for x, _ in MD_POWER_PLAY_GUARD] == pytest.approx(
+        [1.122, 1.113, 1.103, 1.093, 1.083, 1.074, 1.064, 1.055]
+    )
+
+
+def test_generate_mixed_doubles_initial_stones_uses_pattern_for_guard():
+    for pattern, (x, y) in enumerate(MD_POSITIONED_STONE_GUARD):
+        data = generate_mixed_doubles_initial_stones(
+            hammer_team_name="team0",
+            power_play_side=None,
+            positioned_stones_pattern=pattern,
+            hammer_stone_position="house",
+        )
+        # Non-hammer (team1) gets the guard.
+        assert data["team1"][0]["x"] == pytest.approx(x)
+        assert data["team1"][0]["y"] == pytest.approx(y)
+
+    for pattern, (x, y) in enumerate(MD_POWER_PLAY_GUARD):
+        data = generate_mixed_doubles_initial_stones(
+            hammer_team_name="team0",
+            power_play_side="right",
+            positioned_stones_pattern=pattern,
+            hammer_stone_position="house",
+        )
+        assert data["team1"][0]["x"] == pytest.approx(x)
+        assert data["team1"][0]["y"] == pytest.approx(y)
 
 
 def test_generate_mixed_doubles_initial_stones_hammer_gets_house_when_requested():
