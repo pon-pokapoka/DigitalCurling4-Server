@@ -35,6 +35,7 @@ from src.models.schema_models import (
 )
 from src.models.basic_authentication_models import UserModel
 from src.converter import DataConverter
+from src.load_secrets import redis_host, redis_port
 from src.redis_subscriber import RedisSubscriber
 from src.domain.match_rules import (
     MD_POSITIONED_STONES_PATTERN_COUNT,
@@ -54,7 +55,9 @@ from src.authentication.basic_authentication_crud import (
 )
 from src.simulator import StoneSimulator
 
-redis = Redis(host="redis", port=6379, decode_responses=True, health_check_interval=30)
+redis = Redis(
+    host=redis_host, port=redis_port, decode_responses=True, health_check_interval=30
+)
 
 match_router = APIRouter()
 logging.basicConfig(level=logging.INFO)

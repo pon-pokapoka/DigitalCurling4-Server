@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 import secrets
 import hashlib
 import asyncio
@@ -20,10 +19,9 @@ from src.authentication.basic_authentication_crud import (
     ReadAuthentication,
     DeleteAuthentication,
 )
-from src.create_sqlite_engine import engine
+from src.db import Session
 from src.load_secrets import pepper_data
 
-Session = async_sessionmaker(autocommit=False, class_=AsyncSession, bind=engine)
 basic_authentication_router = APIRouter()
 security = HTTPBasic()
 create_auth = CreateAuthentication()

@@ -2,18 +2,17 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import func, select
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from src.authentication.basic_authentication import BasicAuthentication
+from src.create_postgres_engine import engine
 from src.crud import CreateData
 from src.routers import match
 from src.routers.match import Session
-from src.routers import restapi
+from src.routers import health, restapi
 from src.models.schema_models import PlayerSchema, PhysicalSimulatorSchema
-from src.load_secrets import db_name, host, password, port, user
-
-POSTGRES_DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
 
 basic_auth = BasicAuthentication()
 scheduler = AsyncIOScheduler()
@@ -21,6 +20,9 @@ logging.basicConfig(level=logging.DEBUG)
 
 # notification_queue = asyncio.Queue()
 create_data = CreateData()
+
+# Arbitrary, but must stay distinct from src/migrate.py's MIGRATION_LOCK_ID.
+SEED_LOCK_ID = 4_000_002
 
 
 @asynccontextmanager
@@ -47,10 +49,16 @@ async def lifespan(app):
     simulator = PhysicalSimulatorSchema(
         physical_simulator_id=uuid4(), simulator_name="fcv1"
     )
-    async with Session() as session:
-        first_seed_ok = await create_data.create_default_player_data(first_player, session)
-        second_seed_ok = await create_data.create_default_player_data(second_player, session)
-        simulator_seed_ok = await create_data.create_physical_simulator_data(simulator, session)
+    # Replicas start together: without the lock, each could insert the simulator.
+    async with engine.connect() as lock_connection:
+        await lock_connection.execute(select(func.pg_advisory_lock(SEED_LOCK_ID)))
+        try:
+            async with Session() as session:
+                first_seed_ok = await create_data.create_default_player_data(first_player, session)
+                second_seed_ok = await create_data.create_default_player_data(second_player, session)
+                simulator_seed_ok = await create_data.create_physical_simulator_data(simulator, session)
+        finally:
+            await lock_connection.execute(select(func.pg_advisory_unlock(SEED_LOCK_ID)))
 
     if not (first_seed_ok and second_seed_ok and simulator_seed_ok):
         logging.error(
@@ -91,6 +99,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # app.add_middleware(HTTPSRedirectMiddleware)
 app.include_router(match.match_router)
 app.include_router(restapi.rest_router)
+app.include_router(health.health_router)
 
 
 # if __name__ == "__main__":

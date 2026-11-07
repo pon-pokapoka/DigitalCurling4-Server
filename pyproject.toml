@@ -5,7 +5,6 @@ description = "New Server to use Digital Curling"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "aiosqlite==0.21.0",
     "apscheduler==3.11.0",
     "asyncpg==0.30.0",
     "fastapi[all,standard]==0.115.5",

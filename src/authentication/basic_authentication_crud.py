@@ -3,53 +3,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import hashlib
 import logging
 import secrets
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from uuid import UUID
 
-from src.create_sqlite_engine import engine
-from src.models.basic_authentication_shemas import MatchAuthentication, UserTable, Base
+from src.models.basic_authentication_shemas import MatchAuthentication, UserTable
 from src.models.basic_authentication_models import UserModel
 from src.models.dc_models import MatchNameModel
 from src.load_secrets import pepper_data
 
 logging.basicConfig(level=logging.INFO)
-logging.getLogger("aiosqlite").setLevel(logging.WARNING)
 
 
 class CreateAuthentication:
     @staticmethod
-    async def create_table() -> None:
-        """Create table if not exists"""
-        try:
-            async with engine.begin() as conn:
-                # テーブル作成 (既存テーブルがある場合はスキップされる)
-                await conn.run_sync(Base.metadata.create_all)
-        except IntegrityError as e:
-            logging.warning(f"Table already exists or other integrity error: {e}")
-
-    @staticmethod
     async def create_user_data(username: str, password: str, session: AsyncSession) -> None:
-        """Create user data to authenticate the user
+        """Create a user, or replace the password of an existing one
 
         Args:
-            user (UserModel): username and password which
+            username (str): username of the user
+            password (str): plain text password, stored only as a salted hash
             session (AsyncSession): session to connect to the database
         """
-        await CreateAuthentication.create_table()
         salt = secrets.token_hex(8)
-        password = hashlib.sha256((password + salt + pepper_data).encode()).hexdigest()
+        hash_password = hashlib.sha256((password + salt + pepper_data).encode()).hexdigest()
 
+        # An upsert, so that replicas starting together can seed the same users.
+        stmt = insert(UserTable).values(
+            username=username, hash_password=hash_password, salt=salt
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[UserTable.username],
+            set_={"hash_password": hash_password, "salt": salt},
+        )
         try:
-            new_user = UserTable(
-                username=username, hash_password=password, salt=salt
-            )
-            session.add(new_user)
+            await session.execute(stmt)
             await session.commit()
-
-        except Exception as e:
+        except Exception:
             await session.rollback()
-            logging.error(f"Error creating user data: {e}")
+            raise
 
     @staticmethod
     async def create_match_data(
@@ -92,23 +84,18 @@ class ReadAuthentication:
         Returns:
             UserModel: username, password and salt
         """
-        try:
-            stmt = select(UserTable).where(UserTable.username == username)
-            result = await session.execute(stmt)
-            result = result.scalars().first()
-            if result is None:
-                logging.error("User not found")
-                return None
-            user = UserModel(
-                username=result.username,
-                hash_password=result.hash_password,
-                salt=result.salt,
-            )
-            return user
-
-        except Exception as e:
-            logging.error(f"Error reading user data: {e}")
+        stmt = select(UserTable).where(UserTable.username == username)
+        result = await session.execute(stmt)
+        result = result.scalars().first()
+        if result is None:
+            logging.error("User not found")
             return None
+        user = UserModel(
+            username=result.username,
+            hash_password=result.hash_password,
+            salt=result.salt,
+        )
+        return user
 
     @staticmethod
     async def read_match_data(user_data: UserModel, match_id: UUID, session: AsyncSession) -> str:
@@ -122,22 +109,17 @@ class ReadAuthentication:
         Returns:
             MatchAuthenticationModel: match team name and match id
         """
-        try:
-            stmt = select(MatchAuthentication).where(
-                MatchAuthentication.username == user_data.username,
-                MatchAuthentication.match_id == match_id,
-            )
-            result = await session.execute(stmt)
-            result = result.scalars().first()
-            if result is None:
-                logging.error("Match data not found")
-                return None
-            match_team_name = result.match_team_name
-            return match_team_name
-
-        except Exception as e:
-            logging.error(f"Error reading match data: {e}")
+        stmt = select(MatchAuthentication).where(
+            MatchAuthentication.username == user_data.username,
+            MatchAuthentication.match_id == match_id,
+        )
+        result = await session.execute(stmt)
+        result = result.scalars().first()
+        if result is None:
+            logging.error("Match data not found")
             return None
+        match_team_name = result.match_team_name
+        return match_team_name
 
 
 class DeleteAuthentication:
@@ -175,16 +157,12 @@ class DeleteAuthentication:
         """
 
         try:
-            stmt = select(MatchAuthentication).where(
-                MatchAuthentication.expired_at < datetime.now()
+            # A single DELETE, so replicas running this job together can't conflict.
+            await session.execute(
+                delete(MatchAuthentication).where(
+                    MatchAuthentication.expired_at < datetime.now()
+                )
             )
-            result = await session.execute(stmt)
-            result = result.scalars().all()
-            if result is None:
-                logging.error("No expired match data found")
-                return None
-            for match in result:
-                await session.delete(match)
             await session.commit()
 
         except Exception as e:

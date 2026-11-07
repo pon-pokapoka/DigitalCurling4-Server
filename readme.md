@@ -17,28 +17,25 @@ This is a new server for digital curling.
 
 ### Register user data to use basic authentication
 
-This server use Basic authentication to identify client.
-Basic authentication use username and password. Administrator can register user data in src/authentication/basic_authentication.py
+This server uses Basic authentication to identify clients. Users are stored in Postgres, with their passwords salted and hashed.
+
+The server creates the users in `DC_USERS` when it starts. It's a JSON object of username to password, in your `.env` file:
 
 ```bash
-cd ./src/authentication
-python3 basic_authentication.py --username user --password password
+DC_USERS='{"user0":"pass0","user1":"pass1"}'
 ```
 
-This branch has the following default credentials:
-username=user0, password=pass0
-username=user1, password=pass1
-If you set these in your client-side .env file, you can start playing immediately.
+An administrator can also add a user to a running server, or change a password:
 
-Example:
+```bash
+docker compose exec app python src/authentication/basic_authentication.py --username user --password password
+```
+
+Then set the same credentials in your client-side .env file:
+
 ```
 MATCH_USER_NAME="user0"
 PASS_WORD="pass0"
-```
-or
-```
-MATCH_USER_NAME="user1"
-PASS_WORD="pass1"
 ```
 
 ### Start server
@@ -91,37 +88,11 @@ PASS_WORD="pass1"
 
 ### Database migration
 
-When the database schema is updated, existing databases need to be migrated manually.
-This project does not use a migration tool, so you need to apply changes directly.
+`python -m src.migrate` applies each file in `postgres/init/` once, in name order, and records it in the table `schema_migrations`. The server runs it before it starts, under Docker Compose and on Kubernetes, so a new file there is all a schema change needs. Add a new file rather than editing an old one.
 
-**Apply changes to an existing database (keeps existing data)**
+### Run on Kubernetes
 
-1. Check the container name of the `db` service:
-
-    ```bash
-    docker compose ps
-    ```
-
-1. Connect to the database:
-
-    ```bash
-    docker exec -it <db_container_name> psql -U <POSTGRES_USER> -d <POSTGRES_DB>
-    ```
-
-    Replace `<POSTGRES_USER>` and `<POSTGRES_DB>` with the values in your `.env` file.
-
-1. Run the migration SQL. For example, to add the `actual_angular_velocity` column:
-
-    ```sql
-    ALTER TABLE shot_info ADD COLUMN actual_angular_velocity DOUBLE PRECISION;
-    ```
-
-1. Verify and exit:
-
-    ```sql
-    \d shot_info
-    \q
-    ```
+See [k8s/README.md](./k8s/README.md).
 
 ## Communication through SSE
 
