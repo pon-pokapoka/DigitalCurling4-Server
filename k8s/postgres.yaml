@@ -1,0 +1,43 @@
+# Requires the CloudNativePG operator (see README.md).
+#
+# It generates the Secret dc-postgres-app, with the username and password the
+# server connects with, and the Service dc-postgres-rw. The server creates the
+# schema itself (src/migrate.py), as the database's owner.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: dc-postgres
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18
+  # With one instance the default PodDisruptionBudget blocks draining the node.
+  enablePDB: false
+  # Smart shutdown waits for clients to leave, and the server's connection pool
+  # never does, so a restart would otherwise hang for the default 3 minutes.
+  smartShutdownTimeout: 15
+  bootstrap:
+    initdb:
+      database: dc_database
+      owner: dc
+  storage:
+    size: 64Gi
+    storageClass: digitalcurling-local
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: 1GB
+      # A crash can lose the last moments of commits, never corrupt the data.
+      synchronous_commit: "off"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 2Gi
+  affinity:
+    nodeSelector:
+      digitalcurling.io/server: "true"
+    tolerations:
+      - key: digitalcurling.io/server
+        operator: Exists
+        effect: NoSchedule

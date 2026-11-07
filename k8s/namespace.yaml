@@ -1,0 +1,6 @@
+# No pod-security labels: the namespace takes the cluster's default, which is
+# expected to be "restricted". Every pod here passes it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: digitalcurling

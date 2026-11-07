@@ -1,0 +1,32 @@
+# Postgres's data, on a directory of the server node. A local volume has no
+# provisioner, so this PV is made by hand here, and the directory must exist
+# first (see README.md).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: digitalcurling-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: digitalcurling-postgres
+spec:
+  capacity:
+    storage: 64Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: digitalcurling-local
+  local:
+    path: /var/lib/digitalcurling/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - veintisiete

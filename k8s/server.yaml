@@ -1,0 +1,150 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dc-server
+data:
+  # Empty binds IPv4 and IPv6 both. "::" wouldn't: asyncio sets IPV6_V6ONLY.
+  API_HOST: ""
+  DOCKER_PORT: "8080"
+  DB_HOST: dc-postgres-rw
+  DB_PORT: "5432"
+  DB_NAME: dc_database
+  # Per replica. Keep replicas × (size + overflow) below max_connections.
+  DB_POOL_SIZE: "5"
+  DB_MAX_OVERFLOW: "5"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dc-server
+  labels:
+    app.kubernetes.io/name: dc-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dc-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dc-server
+    spec:
+      automountServiceAccountToken: false
+      # Otherwise the Service named redis injects REDIS_PORT=tcp://...:6379,
+      # which isn't the number the server expects if the ConfigMap's is dropped.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: digitalcurling.io/server
+                    operator: In
+                    values:
+                      - "true"
+      tolerations:
+        - key: digitalcurling.io/server
+          operator: Exists
+          effect: NoSchedule
+      initContainers:
+        - name: migrate
+          image: ghcr.io/pon-pokapoka/digitalcurling4-server:latest
+          command:
+            - python
+            - -m
+            - src.migrate
+          envFrom: &envFrom
+            - configMapRef:
+                name: dc-server
+          env:
+            - &dbUser
+              name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: dc-postgres-app
+                  key: username
+            - &dbPassword
+              name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dc-postgres-app
+                  key: password
+            - &pepper
+              name: PEPPER_DATA
+              valueFrom:
+                secretKeyRef:
+                  name: dc-server
+                  key: pepper
+            - name: DC_USERS
+              valueFrom:
+                secretKeyRef:
+                  name: dc-server
+                  key: users
+          securityContext: &containerSecurity
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources: &resources
+            # No CPU limit: throttling a shot would count against a team's clock.
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      containers:
+        - name: server
+          image: ghcr.io/pon-pokapoka/digitalcurling4-server:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom: *envFrom
+          env:
+            - *dbUser
+            - *dbPassword
+            - *pepper
+          securityContext: *containerSecurity
+          resources: *resources
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          # Lenient: a shot blocks the event loop while it's simulated.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dc-server
+spec:
+  ipFamilyPolicy: PreferDualStack
+  selector:
+    app.kubernetes.io/name: dc-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
