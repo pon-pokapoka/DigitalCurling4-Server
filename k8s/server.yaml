@@ -142,6 +142,17 @@ metadata:
   name: dc-server
 spec:
   ipFamilyPolicy: PreferDualStack
+  # Fixed, so the homelab's Caddy on the node can proxy to it
+  # (pon-pokapoka/homelab-iac, ansible/digitalcurling.yml): from the
+  # static band (the first 256) of the cluster's service ranges. Change both
+  # together. Clusters with other ranges: delete these lines.
+  ipFamilies:
+    - IPv6
+    - IPv4
+  clusterIP: fd52:efe7:ff3e:6000::80
+  clusterIPs:
+    - fd52:efe7:ff3e:6000::80
+    - 10.96.0.80
   selector:
     app.kubernetes.io/name: dc-server
   ports:

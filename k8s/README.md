@@ -66,6 +66,12 @@ but they can't do anything useful without Postgres.
    `http://dc-server.digitalcurling.svc.cluster.local:8080`. The Service has
    IPv4 and IPv6 addresses, and the server listens on both.
 
+   On the homelab's LAN it's https://digitalcurling.home.arpa: Caddy on
+   veintisiete proxies to the Service's fixed ClusterIP (`server.yaml`). A
+   ClusterIP can't change in place, so a Service created without it has to be
+   deleted first: `kubectl -n digitalcurling delete service dc-server`, then
+   apply again.
+
 The `migrate` init container applies `postgres/init/*.sql` and creates the users
 in `users` each time a pod starts, so changing a password takes a
 `kubectl -n digitalcurling rollout restart deploy/dc-server`.
