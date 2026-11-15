@@ -25,10 +25,11 @@ spec:
           type: RuntimeDefault
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
+          # Required, not preferred: they can't work without Postgres, which is
+          # pinned to this node anyway, and a preference never moves a pod back.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
                   - key: digitalcurling.io/server
                     operator: In
                     values:
