@@ -5,9 +5,12 @@ The server and Redis run as Deployments, and Postgres as a CloudNativePG
 run several replicas: Postgres holds the matches and the logins, and Redis
 carries events between replicas.
 
-All of it prefers one dedicated node. Postgres is pinned to that node, through
-its local volume. The server and Redis can move to another node if it's gone,
-but they can't do anything useful without Postgres.
+All of it runs on one dedicated node, the one labeled
+`digitalcurling.io/server=true`. Postgres is pinned there through its local
+volume, and the server and Redis require the label. If the node is gone they
+stay Pending rather than start elsewhere, since they can't do anything useful
+without Postgres. A preference would also be a trap: a pod placed on another
+node while this one was briefly unavailable would never move back.
 
 ## Prepare the cluster
 
