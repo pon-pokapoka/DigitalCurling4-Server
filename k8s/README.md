@@ -52,6 +52,20 @@ node while this one was briefly unavailable would never move back.
       --from-literal=users='{"user0":"CHANGE_ME","user1":"CHANGE_ME"}'
     ```
 
+1. Build the image and load it into the node. There is no registry: like the
+   self-play clients, the image is imported into the node's containerd, so
+   only that node has it. `IMAGE_IMPORT_CMD` reads a `docker save` tarball
+   from stdin on the node:
+
+    ```bash
+    IMAGE_IMPORT_CMD='ssh root@veintisiete.home.arpa ctr -n k8s.io images import -' \
+      k8s/image.sh
+    ```
+
+    The image is `digitalcurling4-server:<short commit>`, built from the
+    committed sources. The script sets that tag in `kustomization.yaml`;
+    commit the change.
+
 1. Apply everything:
 
     ```bash
@@ -128,5 +142,8 @@ waiting behind others counts against its team.
   PersistentVolume `Released`, because its reclaim policy is `Retain`. A new
   `Cluster` won't bind to it until you clear the PV's `claimRef` and empty the
   directory.
-- **Images:** `:latest` follows the branch. Pin a commit's tag in production,
-  with `kustomize edit set image`, so that a restart can't change the version.
+- **Images:** each deploy runs the commit tagged in `kustomization.yaml`, so a
+  restart can't change the version. To update, run `k8s/image.sh` on the new
+  commit and apply. The image is only on the node it was imported into: if the
+  node is rebuilt, import it again. A tag missing from the node makes new pods
+  fail with `ErrImagePull`, and the old ones keep running.

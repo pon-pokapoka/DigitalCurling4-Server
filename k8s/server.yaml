@@ -58,7 +58,8 @@ spec:
           effect: NoSchedule
       initContainers:
         - name: migrate
-          image: ghcr.io/pon-pokapoka/digitalcurling4-server:latest
+          image: digitalcurling4-server   # tag set in kustomization.yaml
+          imagePullPolicy: IfNotPresent   # imported into the node, see README
           command:
             - python
             - -m
@@ -105,7 +106,8 @@ spec:
               memory: 512Mi
       containers:
         - name: server
-          image: ghcr.io/pon-pokapoka/digitalcurling4-server:latest
+          image: digitalcurling4-server   # tag set in kustomization.yaml
+          imagePullPolicy: IfNotPresent   # imported into the node, see README
           ports:
             - name: http
               containerPort: 8080

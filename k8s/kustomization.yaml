@@ -7,3 +7,8 @@ resources:
   - postgres.yaml
   - redis.yaml
   - server.yaml
+images:
+  # Built and imported into the node's containerd by k8s/image.sh, which also
+  # updates this tag: there is no registry to pull from.
+  - name: digitalcurling4-server
+    newTag: d93c45b
