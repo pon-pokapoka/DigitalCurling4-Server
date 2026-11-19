@@ -26,7 +26,7 @@ spec:
     required:
       nodeSelectorTerms:
         - matchExpressions:
-            - key: kubernetes.io/hostname
+            - key: digitalcurling.io/server
               operator: In
               values:
-                - veintisiete
+                - "true"

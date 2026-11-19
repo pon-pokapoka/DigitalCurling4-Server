@@ -26,8 +26,8 @@ node while this one was briefly unavailable would never move back.
    operator needs another node to run on, because it doesn't tolerate the taint.
 
     ```bash
-    kubectl label node veintisiete digitalcurling.io/server=true
-    kubectl taint node veintisiete digitalcurling.io/server=true:NoSchedule
+    kubectl label node <node> digitalcurling.io/server=true
+    kubectl taint node <node> digitalcurling.io/server=true:NoSchedule
     ```
 
 1. Create the data directory on that node. Kubernetes sets its group when the
@@ -37,8 +37,7 @@ node while this one was briefly unavailable would never move back.
     mkdir -p /var/lib/digitalcurling/postgres
     ```
 
-1. If the node isn't called `veintisiete`, change it in `storage.yaml`. Keep
-   `capacity.storage` there and `storage.size` in `postgres.yaml` equal, and
+1. Keep `capacity.storage` in `storage.yaml` and `storage.size` in `postgres.yaml` equal, and
    within the node's disk. `postgres.yaml` also sets the memory limits.
 
 ## Deploy
@@ -69,15 +68,39 @@ node while this one was briefly unavailable would never move back.
    `http://dc-server.digitalcurling.svc.cluster.local:8080`. The Service has
    IPv4 and IPv6 addresses, and the server listens on both.
 
-   On the homelab's LAN it's https://digitalcurling.home.arpa: Caddy on
-   veintisiete proxies to the Service's fixed ClusterIP (`server.yaml`). A
-   ClusterIP can't change in place, so a Service created without it has to be
-   deleted first: `kubectl -n digitalcurling delete service dc-server`, then
-   apply again.
+   To serve it outside the cluster, put a reverse proxy in front of the
+   Service, or add an Ingress. Settings that belong to one cluster (a fixed
+   ClusterIP for a proxy on a node, the node's hostname, an image registry)
+   go in a kustomize overlay kept with that cluster's configuration, not
+   here. See [Local settings](#local-settings).
 
 The `migrate` init container applies `postgres/init/*.sql` and creates the users
 in `users` each time a pod starts, so changing a password takes a
 `kubectl -n digitalcurling rollout restart deploy/dc-server`.
+
+## Local settings
+
+`k8s/` holds only what every cluster needs. Keep your own cluster's settings
+in an overlay outside this repository that uses it as a base, for example:
+
+```yaml
+# kustomization.yaml in your own (private) configuration
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/pon-pokapoka/DigitalCurling4-Server//k8s?ref=<commit>
+patches:
+  # A fixed ClusterIP, for a reverse proxy on a node. Pick it from the
+  # static band (the first 256 addresses) of your service range.
+  - target: { kind: Service, name: dc-server }
+    patch: |
+      - op: add
+        path: /spec/clusterIP
+        value: <address>
+```
+
+Apply it with `kubectl apply -k <overlay directory>`. A ClusterIP can't change
+in place: to add one to an existing Service, delete the Service first.
 
 ## Scaling
 
