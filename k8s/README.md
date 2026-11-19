@@ -52,6 +52,24 @@ node while this one was briefly unavailable would never move back.
       --from-literal=users='{"user0":"CHANGE_ME","user1":"CHANGE_ME"}'
     ```
 
+1. Build the image and make it available to the node: push it to a registry
+   the nodes pull from, or, without a registry, import it into the node's
+   containerd (then only that node has it):
+
+    ```bash
+    IMAGE_REGISTRY=<registry> k8s/image.sh       # docker login <registry> first
+    # or
+    IMAGE_IMPORT_CMD='ssh root@<node> ctr -n k8s.io images import -' k8s/image.sh
+    ```
+
+    With a registry, set `images: [{name: digitalcurling4-server, newName:
+    <registry>/digitalcurling4-server}]` in your overlay (see
+    [Local settings](#local-settings)).
+
+    The image is `digitalcurling4-server:<short commit>`, built from the
+    committed sources. The script sets that tag in `kustomization.yaml`;
+    commit the change.
+
 1. Apply everything:
 
     ```bash
@@ -128,5 +146,9 @@ waiting behind others counts against its team.
   PersistentVolume `Released`, because its reclaim policy is `Retain`. A new
   `Cluster` won't bind to it until you clear the PV's `claimRef` and empty the
   directory.
-- **Images:** `:latest` follows the branch. Pin a commit's tag in production,
-  with `kustomize edit set image`, so that a restart can't change the version.
+- **Images:** each deploy runs the commit tagged in `kustomization.yaml`, so a
+  restart can't change the version. To update, run `k8s/image.sh` on the new
+  commit and apply. A tag the node can't get makes new pods fail with
+  `ErrImagePull`, and the old ones keep running. Without a registry, the image
+  is only on the node it was imported into: if the node is rebuilt, or the
+  kubelet removes the image to free disk, import it again.
