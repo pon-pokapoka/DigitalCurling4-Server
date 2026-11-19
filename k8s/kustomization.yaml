@@ -11,4 +11,4 @@ images:
   # The tag is set by k8s/image.sh, which builds the image and pushes it to a
   # registry or imports it into the node. A registry's name goes in your overlay.
   - name: digitalcurling4-server
-    newTag: "d93c45b"
+    newTag: "d150b3a"
