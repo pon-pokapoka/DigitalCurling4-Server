@@ -787,10 +787,22 @@ class CreateData:
                 team0=match.score.team0,
                 team1=match.score.team1,
             )
-            new_tournament = Tournament(
-                tournament_id=match.tournament.tournament_id,
-                tournament_name=match.tournament.tournament_name,
+            # Matches created with the same tournament name join one tournament: the oldest one with
+            # that name (tournament IDs are uuid7, so time-ordered), or a new one if none exists.
+            stmt = (
+                select(Tournament.tournament_id)
+                .where(Tournament.tournament_name == match.tournament.tournament_name)
+                .order_by(Tournament.tournament_id)
+                .limit(1)
             )
+            tournament_id = (await session.execute(stmt)).scalars().first()
+            new_tournament = None
+            if tournament_id is None:
+                tournament_id = match.tournament.tournament_id
+                new_tournament = Tournament(
+                    tournament_id=tournament_id,
+                    tournament_name=match.tournament.tournament_name,
+                )
 
             new_match = Match(
                 match_id=match.match_id,
@@ -812,7 +824,7 @@ class CreateData:
                 standard_end_count=match.standard_end_count,
                 applied_rule=match.applied_rule,
                 physical_simulator_id=match.physical_simulator_id,
-                tournament_id=match.tournament_id,
+                tournament_id=tournament_id,
                 match_name=match.match_name,
                 game_mode=match.game_mode,
                 created_at=match.created_at,
@@ -837,7 +849,7 @@ class CreateData:
                     ),
                 )
 
-            items = [new_score, new_tournament, new_match]
+            items = [new_score, *([new_tournament] if new_tournament else []), new_match]
             if new_md_settings is not None:
                 items.append(new_md_settings)
 
