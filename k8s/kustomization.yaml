@@ -8,7 +8,7 @@ resources:
   - redis.yaml
   - server.yaml
 images:
-  # Built and imported into the node's containerd by k8s/image.sh, which also
-  # updates this tag: there is no registry to pull from.
+  # The tag is set by k8s/image.sh, which builds the image and pushes it to a
+  # registry or imports it into the node. A registry's name goes in your overlay.
   - name: digitalcurling4-server
-    newTag: d93c45b
+    newTag: "d93c45b"

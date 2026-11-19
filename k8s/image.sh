@@ -43,5 +43,5 @@ else
 fi
 
 kustomization="$repo_root/k8s/kustomization.yaml"
-sed -i -E "/- name: digitalcurling4-server/{n;s/newTag: .*/newTag: $commit/}" "$kustomization"
+sed -i -E "/- name: digitalcurling4-server/{n;s/newTag: .*/newTag: \"$commit\"/}" "$kustomization"
 echo "k8s/kustomization.yaml now uses $image: commit it, then kubectl apply -k k8s" >&2
