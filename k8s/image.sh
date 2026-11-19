@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Build the server image from a commit, load it into the node's containerd, and
-# point k8s/kustomization.yaml at it. There is no registry: like the self-play
-# clients, the image is imported straight into the node that runs it.
+# point k8s/kustomization.yaml at it. No registry is involved: the image is
+# imported straight into the node that runs it.
 #
 #   k8s/image.sh [<git ref>]        # default HEAD
 #
 # The image is digitalcurling4-server:<short commit>, built from the committed
 # sources at <git ref>, so local changes don't leak in.
 # IMAGE_IMPORT_CMD loads a `docker save` tarball from stdin on the node, e.g.
-#   IMAGE_IMPORT_CMD='ssh root@veintisiete.home.arpa ctr -n k8s.io images import -'
+#   IMAGE_IMPORT_CMD='ssh root@<node> ctr -n k8s.io images import -'
 # Unset, the image is only built, and you load it yourself.
 set -euo pipefail
 
