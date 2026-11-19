@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Build the server image from a commit, load it into the node's containerd, and
-# point k8s/kustomization.yaml at it. No registry is involved: the image is
-# imported straight into the node that runs it.
+# Build the server image from a commit, push it to a registry or load it into
+# the node's containerd, and point k8s/kustomization.yaml at it.
 #
 #   k8s/image.sh [<git ref>]        # default HEAD
 #
@@ -9,11 +8,14 @@
 # sources at <git ref>, so local changes don't leak in.
 # IMAGE_IMPORT_CMD loads a `docker save` tarball from stdin on the node, e.g.
 #   IMAGE_IMPORT_CMD='ssh root@<node> ctr -n k8s.io images import -'
-# Unset, the image is only built, and you load it yourself.
+# IMAGE_REGISTRY pushes it to a registry instead, as
+# $IMAGE_REGISTRY/digitalcurling4-server:<short commit> (docker login first);
+# point your overlay's images: newName there.
+# With neither set, the image is only built, and you load it yourself.
 set -euo pipefail
 
 if [[ $# -gt 1 ]]; then
-  sed -n '2,13p' "$0" >&2
+  sed -n '2,16p' "$0" >&2
   exit 1
 fi
 ref="${1:-HEAD}"
@@ -28,11 +30,16 @@ git -C "$repo_root" archive --format=tar "$commit" | docker build \
   -t "$image" -
 echo "built $image" >&2
 
-if [[ -n "${IMAGE_IMPORT_CMD:-}" ]]; then
+if [[ -n "${IMAGE_REGISTRY:-}" ]]; then
+  remote="${IMAGE_REGISTRY%/}/$image"
+  docker tag "$image" "$remote"
+  docker push "$remote"
+  echo "pushed $remote" >&2
+elif [[ -n "${IMAGE_IMPORT_CMD:-}" ]]; then
   docker save "$image" | bash -c "$IMAGE_IMPORT_CMD"
   echo "imported $image" >&2
 else
-  echo "IMAGE_IMPORT_CMD is not set: load $image into the node yourself." >&2
+  echo "Neither IMAGE_REGISTRY nor IMAGE_IMPORT_CMD is set: load $image into the node yourself." >&2
 fi
 
 kustomization="$repo_root/k8s/kustomization.yaml"
