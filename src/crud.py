@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from typing import List
@@ -787,10 +788,26 @@ class CreateData:
                 team0=match.score.team0,
                 team1=match.score.team1,
             )
-            new_tournament = Tournament(
-                tournament_id=match.tournament.tournament_id,
-                tournament_name=match.tournament.tournament_name,
+            # One tournament per name: the first match of a name creates it,
+            # later ones join it. ON CONFLICT waits for a concurrent insert of
+            # the same name, so replicas agree on the id.
+            await session.execute(
+                pg_insert(Tournament)
+                .values(
+                    tournament_id=match.tournament.tournament_id,
+                    tournament_name=match.tournament.tournament_name,
+                )
+                .on_conflict_do_nothing(index_elements=["tournament_name"])
             )
+            tournament_id = (
+                await session.execute(
+                    select(Tournament.tournament_id).where(
+                        Tournament.tournament_name == match.tournament.tournament_name
+                    )
+                )
+            ).scalar_one()
+            match.tournament_id = tournament_id
+            match.tournament.tournament_id = tournament_id
 
             new_match = Match(
                 match_id=match.match_id,
@@ -837,7 +854,7 @@ class CreateData:
                     ),
                 )
 
-            items = [new_score, new_tournament, new_match]
+            items = [new_score, new_match]
             if new_md_settings is not None:
                 items.append(new_md_settings)
 
@@ -1050,11 +1067,14 @@ class CreateData:
             session (AsyncSession): AsyncSession object to interact with database
         """
         try:
-            new_tournament = Tournament(
-                tournament_id=tournament.tournament_id,
-                tournament_name=tournament.tournament_name,
+            await session.execute(
+                pg_insert(Tournament)
+                .values(
+                    tournament_id=tournament.tournament_id,
+                    tournament_name=tournament.tournament_name,
+                )
+                .on_conflict_do_nothing(index_elements=["tournament_name"])
             )
-            session.add(new_tournament)
             await session.commit()
             return True
         except Exception as e:

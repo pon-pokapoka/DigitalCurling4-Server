@@ -181,7 +181,7 @@ class PhysicalSimulator(Base):
 class Tournament(Base):
     __tablename__ = "tournament"
     tournament_id = Column(Uuid, primary_key=True, default=uuid4)
-    tournament_name = Column(String)
+    tournament_name = Column(String, unique=True)  # postgres/init/04_tournament_name_unique.sql
 
     match = relationship(
         "Match",
